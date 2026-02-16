@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>P2P Messenger</title>
+
+<script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+
+<style>
+* { box-sizing: border-box; }
+
+body {
+    margin: 0;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto;
+    background: #0b1220;
+    color: white;
+}
+
+.app {
+    display: flex;
+    height: 100vh;
+}
+
+/* ===== SIDEBAR ===== */
+
+.sidebar {
+    width: 280px;
+    background: #020617;
+    border-right: 1px solid #1e293b;
+    display: flex;
+    flex-direction: column;
+}
+
+.me {
+    padding: 12px;
+    border-bottom: 1px solid #1e293b;
+    font-size: 12px;
+    word-break: break-all;
+    color: #94a3b8;
+}
+
+.contacts {
+    flex: 1;
+    overflow-y: auto;
+}
+
+.contact {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px;
+    border-bottom: 1px solid #020617;
+    cursor: pointer;
+}
+
+.contact:hover {
+    background: #020617;
+}
+
+.del {
+    color: #f87171;
+    font-size: 14px;
+    cursor: pointer;
+}
+
+/* ===== ADD FRIEND ===== */
+
+.add {
+    padding: 10px;
+    border-top: 1px solid #1e293b;
+}
+
+.add input {
+    width: 100%;
+    padding: 8px;
+    background: #020617;
+    border: 1px solid #1e293b;
+    border-radius: 6px;
+    color: white;
+    margin-bottom: 6px;
+}
+
+.add button {
+    width: 100%;
+    padding: 8px;
+    background: #2563eb;
+    border: none;
+    border-radius: 6px;
+    color: white;
+    font-weight: 600;
+}
+
+/* ===== CHAT ===== */
+
+.chat {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.chat-header {
+    padding: 12px;
+    border-bottom: 1px solid #1e293b;
+    font-weight: 600;
+}
+
+.messages {
+    flex: 1;
+    padding: 10px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.msg {
+    max-width: 75%;
+    padding: 8px 12px;
+    border-radius: 10px;
+    word-wrap: break-word;
+}
+
+.me-msg {
+    align-self: flex-end;
+    background: #2563eb;
+}
+
+.peer-msg {
+    align-self: flex-start;
+    background: #1e293b;
+}
+
+.msg img {
+    max-width: 100%;
+    border-radius: 8px;
+}
+
+/* ===== INPUT ===== */
+
+.input {
+    display: flex;
+    gap: 6px;
+    padding: 10px;
+    border-top: 1px solid #1e293b;
+}
+
+.input input[type=text] {
+    flex: 1;
+    padding: 10px;
+    background: #020617;
+    border: 1px solid #1e293b;
+    border-radius: 8px;
+    color: white;
+}
+
+.input input[type=file] {
+    display: none;
+}
+
+.input button {
+    padding: 10px 14px;
+    background: #2563eb;
+    border: none;
+    border-radius: 8px;
+    color: white;
+    font-weight: 600;
+}
+
+/* ===== MOBILE ===== */
+
+@media (max-width: 700px) {
+    .sidebar {
+        width: 90px;
+    }
+    .me {
+        display: none;
+    }
+}
+</style>
+</head>
+
+<body>
+
+<div class="app">
+    <div class="sidebar">
+        <div class="me" id="myid"></div>
+        <div class="contacts" id="contacts"></div>
+
+        <div class="add">
+            <input id="newid" placeholder="ID друга">
+            <button onclick="addFriend()">Добавить</button>
+        </div>
+    </div>
+
+    <div class="chat">
+        <div class="chat-header" id="chatTitle">Выбери контакт</div>
+        <div class="messages" id="messages"></div>
+
+        <div class="input">
+            <label for="file">
+                <button>📷</button>
+            </label>
+            <input id="file" type="file" accept="image/*" onchange="sendImage(this.files[0])">
+
+            <input id="msg" type="text" placeholder="Сообщение">
+            <button onclick="send()">➤</button>
+        </div>
+    </div>
+</div>
+
+<script>
+let myId = localStorage.getItem("myid");
+if(!myId){
+    myId = "user-" + Math.random().toString(36).slice(2,10);
+    localStorage.setItem("myid", myId);
+}
+
+let peer = new Peer(myId, { host:"0.peerjs.com", port:443, secure:true });
+let conn = null;
+
+let friends = JSON.parse(localStorage.getItem("friends") || "[]");
+
+myid.textContent = "Твой ID: " + myId;
+
+function renderFriends(){
+    contacts.innerHTML = "";
+    friends.forEach((id, i) => {
+        let div = document.createElement("div");
+        div.className = "contact";
+        div.innerHTML = `<span onclick="connect('${id}')">${id}</span>
+                         <span class="del" onclick="removeFriend(${i})">✖</span>`;
+        contacts.appendChild(div);
+    });
+}
+renderFriends();
+
+function addFriend(){
+    let id = newid.value.trim();
+    if(!id || friends.includes(id)) return;
+
+    friends.push(id);
+    localStorage.setItem("friends", JSON.stringify(friends));
+    newid.value = "";
+    renderFriends();
+}
+
+function removeFriend(i){
+    friends.splice(i,1);
+    localStorage.setItem("friends", JSON.stringify(friends));
+    renderFriends();
+}
+
+peer.on('connection', c => {
+    conn = c;
+    setupConn();
+    chatTitle.textContent = "Чат с " + conn.peer;
+});
+
+function connect(id){
+    conn = peer.connect(id,{reliable:true});
+    setupConn();
+    chatTitle.textContent = "Чат с " + id;
+}
+
+function setupConn(){
+    conn.on('open', () => log("Соединение установлено"));
+    conn.on('data', data => {
+        if(typeof data === "string"){
+            log(data,"peer-msg");
+        } else {
+            let img = document.createElement("img");
+            img.src = data;
+            log(img,"peer-msg",true);
+        }
+    });
+}
+
+function send(){
+    if(!conn || !conn.open) return;
+
+    let text = msg.value.trim();
+    if(!text) return;
+
+    conn.send(text);
+    log(text,"me-msg");
+    msg.value="";
+}
+
+function sendImage(file){
+    if(!conn || !conn.open) return;
+
+    let reader = new FileReader();
+    reader.onload = () => {
+        conn.send(reader.result);
+        let img = document.createElement("img");
+        img.src = reader.result;
+        log(img,"me-msg",true);
+    };
+    reader.readAsDataURL(file);
+}
+
+function log(data, cls="peer-msg", isImg=false){
+    let div = document.createElement("div");
+    div.className = "msg " + cls;
+
+    if(isImg){
+        div.appendChild(data);
+    } else {
+        div.textContent = data;
+    }
+
+    messages.appendChild(div);
+    messages.scrollTop = messages.scrollHeight;
+}
+</script>
+
+</body>
+</html>
